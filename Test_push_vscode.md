@@ -677,3 +677,411 @@ java -jar target/jira-epic-creator-1.0.0.jar
 ---
 
 *Documentation Technique — Jira Epic Creator v1.0.0 — Mars 2026*
+
+
+# Documentation explicative — Fonctionnement général du projet Jira Epic Creator
+
+## 1. Introduction
+
+Le projet **Jira Epic Creator** est une petite application web dont le but est d'automatiser la création d’Epics et de sous-tâches dans Jira.
+
+Normalement, lorsqu’un développeur ou un chef de projet veut créer un Epic dans Jira, il doit :
+
+1. créer l’Epic
+2. créer plusieurs tâches associées
+3. relier chaque tâche à l’Epic
+4. ajouter des labels, descriptions, etc.
+
+Ce processus est **répétitif et long**.
+
+L’objectif de ce projet est donc simple :
+
+> permettre à un utilisateur de remplir un formulaire, cliquer sur un bouton, et laisser l’application créer automatiquement l’Epic et toutes ses tâches dans Jira.
+
+---
+
+# 2. Vue d’ensemble de l’architecture
+
+Le projet est organisé selon une architecture classique **client / serveur**.
+
+Il y a **trois parties principales** :
+
+```
+Interface utilisateur (Frontend)
+        ↓
+Serveur Java (Backend)
+        ↓
+API Jira (service externe)
+```
+
+Chaque partie a un rôle précis.
+
+---
+
+# 3. L’interface utilisateur (Frontend)
+
+## Rôle
+
+L’interface utilisateur est la partie visible par l’utilisateur.
+
+Elle est composée d’une simple page web contenant :
+
+- du **HTML** pour la structure
+- du **CSS** pour l’apparence
+- du **JavaScript** pour la logique
+
+Cette interface sert principalement à :
+
+- récupérer les informations saisies par l’utilisateur
+- afficher les templates disponibles
+- envoyer les données au serveur
+- afficher le résultat de l’opération
+
+Important :
+
+> l’interface ne communique **jamais directement avec Jira**.
+
+Elle communique uniquement avec le **serveur Java**.
+
+---
+
+## Fonctionnement du formulaire
+
+L’utilisateur remplit un formulaire contenant par exemple :
+
+```
+Nom de l'Epic
+Description
+Template de tâches
+Labels
+```
+
+Exemple :
+
+```
+Epic name : Refonte page login
+Template : FEATURE
+Labels : sprint-3, frontend
+```
+
+Ces informations servent à construire un **objet de données** qui sera envoyé au serveur.
+
+---
+
+## Envoi de la requête au serveur
+
+Lorsque l’utilisateur clique sur le bouton **Créer**, le JavaScript de la page effectue une requête HTTP vers le serveur.
+
+Cette requête contient les informations du formulaire sous forme de **JSON**.
+
+Exemple de données envoyées :
+
+```json
+{
+  "epicName": "Refonte login",
+  "epicDescription": "Améliorer UX login",
+  "projectKey": "DEV",
+  "template": "FEATURE",
+  "labels": ["frontend", "sprint-3"]
+}
+```
+
+Cette requête est envoyée à l’adresse :
+
+```
+POST /api/epic
+```
+
+qui correspond à un endpoint exposé par le serveur Java.
+
+---
+
+# 4. Le serveur Java (Backend)
+
+## Rôle
+
+Le serveur Java est le **cœur de l’application**.
+
+C’est lui qui va :
+
+1. recevoir les requêtes envoyées par l’interface
+2. interpréter les données reçues
+3. appliquer la logique métier
+4. appeler l’API Jira
+5. renvoyer le résultat à l’interface
+
+Le serveur est construit avec **Spring Boot**, un framework très utilisé pour créer des applications Java web.
+
+Spring Boot permet notamment de :
+
+- créer facilement des API REST
+- gérer les requêtes HTTP
+- convertir automatiquement les données JSON en objets Java
+- configurer rapidement un serveur web
+
+---
+
+# 5. Le démarrage du serveur
+
+Lorsque l’application démarre, Spring Boot lance automatiquement un serveur web.
+
+Ce serveur écoute les requêtes HTTP sur un port (par exemple **8080**).
+
+Cela signifie que l’application devient accessible via :
+
+```
+http://localhost:8080
+```
+
+À partir de ce moment, le serveur peut recevoir des requêtes provenant de l’interface.
+
+---
+
+# 6. Le rôle du Controller
+
+Dans une application Spring Boot, les **Controllers** sont responsables de la gestion des requêtes HTTP.
+
+Un controller agit comme une **porte d’entrée** vers l’application.
+
+Dans ce projet, le controller expose plusieurs endpoints :
+
+```
+POST /api/epic
+GET  /api/templates
+GET  /api/health
+```
+
+Le plus important est :
+
+```
+POST /api/epic
+```
+
+Cet endpoint est appelé lorsque l’utilisateur veut créer un Epic.
+
+Le controller reçoit la requête et transmet les informations au **service métier**.
+
+---
+
+# 7. Le transfert des données
+
+Lorsque le serveur reçoit les données JSON envoyées par l’interface, Spring Boot les transforme automatiquement en **objet Java**.
+
+Ce type d’objet s’appelle un **DTO (Data Transfer Object)**.
+
+Dans ce projet, l’objet s’appelle :
+
+```
+EpicRequest
+```
+
+Il contient les informations envoyées par le frontend :
+
+```
+epicName
+epicDescription
+projectKey
+template
+labels
+```
+
+Le but du DTO est simplement de transporter les données entre les différentes couches de l’application.
+
+---
+
+# 8. La logique métier (Service)
+
+La logique principale de l’application se trouve dans le **service**.
+
+Le service est responsable de :
+
+1. créer l’Epic dans Jira
+2. récupérer les tâches correspondant au template choisi
+3. créer les sous-tâches
+4. relier les tâches à l’Epic
+5. renvoyer le résultat final
+
+On peut représenter cette logique de manière simplifiée :
+
+```
+Créer Epic
+      ↓
+Récupérer template
+      ↓
+Créer chaque tâche
+      ↓
+Associer les tâches à l’Epic
+      ↓
+Retourner le résultat
+```
+
+---
+
+# 9. Les templates de tâches
+
+Pour éviter de recréer les mêmes tâches à chaque fois, le projet utilise un système de **templates**.
+
+Un template correspond à une liste de tâches prédéfinies.
+
+Par exemple :
+
+```
+FEATURE
+ ├ Analyse
+ ├ Développement backend
+ ├ Développement frontend
+ ├ Tests
+ └ Déploiement
+```
+
+Chaque template correspond donc à une liste de tâches qui seront créées automatiquement.
+
+Lorsque l’utilisateur choisit un template, le serveur récupère la liste correspondante et crée chaque tâche dans Jira.
+
+---
+
+# 10. Communication avec l’API Jira
+
+Le serveur Java doit ensuite communiquer avec **Jira**.
+
+Jira expose une **API REST**, qui permet de créer des tickets via des requêtes HTTP.
+
+Le serveur envoie donc une requête vers l’API Jira :
+
+```
+POST /rest/api/3/issue
+```
+
+avec un JSON décrivant le ticket à créer.
+
+Exemple simplifié :
+
+```json
+{
+  "fields": {
+    "project": {
+      "key": "DEV"
+    },
+    "summary": "Refonte login",
+    "issuetype": {
+      "name": "Epic"
+    }
+  }
+}
+```
+
+Jira crée alors l’Epic et renvoie une réponse contenant son identifiant.
+
+---
+
+# 11. Création des sous-tâches
+
+Une fois l’Epic créé, le serveur récupère son identifiant.
+
+Ensuite, pour chaque tâche du template, il envoie une nouvelle requête à Jira.
+
+Chaque tâche contient une référence vers l’Epic afin de créer la relation hiérarchique.
+
+On obtient donc une structure comme ceci :
+
+```
+Epic
+ ├ Task 1
+ ├ Task 2
+ ├ Task 3
+ ├ Task 4
+```
+
+Toutes les tâches sont automatiquement liées à l’Epic.
+
+---
+
+# 12. Réponse du serveur
+
+Une fois toutes les opérations terminées, le serveur renvoie une réponse à l’interface.
+
+Exemple :
+
+```json
+{
+  "success": true,
+  "epicId": "DEV-123",
+  "tasksCreated": 12
+}
+```
+
+Le navigateur peut alors afficher un message de succès à l’utilisateur.
+
+---
+
+# 13. Flux complet de l’application
+
+On peut résumer tout le fonctionnement avec ce schéma :
+
+```
+Utilisateur
+     ↓
+Interface web
+     ↓
+Requête HTTP
+     ↓
+Serveur Java
+     ↓
+Service métier
+     ↓
+Appel API Jira
+     ↓
+Création Epic + tâches
+     ↓
+Réponse JSON
+     ↓
+Affichage du résultat
+```
+
+---
+
+# 14. Résumé général
+
+Ce projet repose sur un principe simple :
+
+- l’interface collecte les informations
+- le serveur applique la logique
+- l’API Jira crée les tickets
+
+On peut donc résumer l’architecture ainsi :
+
+```
+Frontend
+   ↓
+Backend Java
+   ↓
+Jira API
+```
+
+Chaque couche a une responsabilité claire :
+
+| Couche | Rôle |
+|------|------|
+| Interface | interaction avec l’utilisateur |
+| Backend | logique et automatisation |
+| API Jira | création réelle des tickets |
+
+---
+
+# 15. Conclusion
+
+Le projet **Jira Epic Creator** est une application simple mais très représentative des architectures modernes.
+
+Il montre comment :
+
+- créer une interface web
+- construire une API backend
+- interagir avec un service externe
+- automatiser des tâches répétitives
+
+Même si le projet reste relativement petit, il illustre plusieurs concepts fondamentaux du développement web moderne :
+
+- architecture client-serveur
+- APIs REST
+- séparation des responsabilités
+- automatisation des processus métier
